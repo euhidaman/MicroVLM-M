@@ -4,18 +4,6 @@ Downloads and prepares the CC12M dataset for training
 """
 
 import os
-import json
-import requests
-from PIL import Image
-from io import BytesIO
-import pandas as pd
-from tqdm import tqdm
-import multiprocessing as mp
-from functools import partial
-import argparse
-
-
-import os
 import sys
 import argparse
 from pathlib import Path
@@ -94,14 +82,16 @@ def download_image(args):
     Download single image
 
     Args:
-        item: (idx, url, caption) tuple
-        save_dir: directory to save images
-        timeout: download timeout in seconds
+        args: tuple of (item, save_dir, timeout)
+            item: (idx, url, caption) tuple
+            save_dir: directory to save images
+            timeout: download timeout in seconds
 
     Returns:
         success: bool indicating success
         result: (idx, image_path, caption, error) tuple
     """
+    item, save_dir, timeout = args
     idx, url, caption = item
 
     try:
@@ -180,15 +170,16 @@ def process_tsv(tsv_path, output_dir, max_samples=None, num_workers=16):
     # Download images in parallel
     print(f"Downloading images with {num_workers} workers...")
 
-    download_fn = partial(download_image, save_dir=images_dir)
+    # Prepare download arguments
+    download_args = [(item, images_dir, 5) for item in items]
 
     successful_items = []
     failed_items = []
 
-    with mp.Pool(num_workers) as pool:
+    with Pool(num_workers) as pool:
         results = list(tqdm(
-            pool.imap(download_fn, items),
-            total=len(items),
+            pool.imap(download_image, download_args),
+            total=len(download_args),
             desc="Downloading"
         ))
 
