@@ -7,6 +7,7 @@ import json
 import os
 import sys
 
+
 def extract_bitnet_config():
     """Extract standard BitNet configuration parameters"""
     bitnet_config = {
@@ -24,6 +25,7 @@ def extract_bitnet_config():
         "use_kernel": False  # Set to False for fp16 training
     }
     return bitnet_config
+
 
 def extract_deit_tiny_config():
     """Extract DeiT-Tiny configuration parameters"""
@@ -44,14 +46,15 @@ def extract_deit_tiny_config():
     }
     return deit_config
 
+
 def compute_adapter_config(bitnet_config, deit_config):
     """Compute multimodal adapter configuration"""
     num_patches = deit_config["num_patches"]
-    
+
     # Dynamic K_prefix calculation: clamp(ceil(num_patches / 8), 8, 64)
     import math
     k_prefix = max(8, min(64, math.ceil(num_patches / 8)))
-    
+
     adapter_config = {
         "input_dim": deit_config["embed_dim"],
         "output_dim": bitnet_config["hidden_size"],
@@ -63,6 +66,7 @@ def compute_adapter_config(bitnet_config, deit_config):
         "use_layer_norm": True
     }
     return adapter_config
+
 
 def compute_memory_config(bitnet_config):
     """Compute episodic memory configuration"""
@@ -81,6 +85,7 @@ def compute_memory_config(bitnet_config):
     }
     return memory_config
 
+
 def compute_scope_config(bitnet_config):
     """Compute ScopeNet configuration"""
     scope_config = {
@@ -91,6 +96,7 @@ def compute_scope_config(bitnet_config):
         "activation": "relu"
     }
     return scope_config
+
 
 def compute_attention_viz_config():
     """Compute attention visualization configuration"""
@@ -105,10 +111,11 @@ def compute_attention_viz_config():
     }
     return viz_config
 
+
 def main():
     """Main extraction function"""
     print("Extracting model configurations...")
-    
+
     # Extract individual configs
     bitnet_config = extract_bitnet_config()
     deit_config = extract_deit_tiny_config()
@@ -116,7 +123,7 @@ def main():
     memory_config = compute_memory_config(bitnet_config)
     scope_config = compute_scope_config(bitnet_config)
     viz_config = compute_attention_viz_config()
-    
+
     # Combine into master config
     master_config = {
         "bitnet": bitnet_config,
@@ -127,15 +134,15 @@ def main():
         "attention_viz": viz_config,
         "model_size_target_mb": 500
     }
-    
+
     # Save to configs directory
     config_dir = os.path.join(os.path.dirname(__file__), "..", "configs")
     os.makedirs(config_dir, exist_ok=True)
-    
+
     config_path = os.path.join(config_dir, "model_config.json")
     with open(config_path, "w") as f:
         json.dump(master_config, f, indent=2)
-    
+
     print(f"Configuration saved to: {config_path}")
     print("\nConfiguration Summary:")
     print(f"  BitNet hidden size: {bitnet_config['hidden_size']}")
@@ -145,8 +152,9 @@ def main():
     print(f"  Adapter K_prefix: {adapter_config['k_prefix']}")
     print(f"  Memory slots: {memory_config['k_mem']}")
     print(f"  Attention viz slices: {viz_config['num_slices']}")
-    
+
     return master_config
+
 
 if __name__ == "__main__":
     config = main()

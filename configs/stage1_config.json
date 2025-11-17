@@ -1,0 +1,52 @@
+{
+  "model_config_path": "configs/model_config.json",
+  "data": {
+    "train_metadata": "data/cc12m/train_metadata.json",
+    "val_metadata": "data/cc12m/val_metadata.json",
+    "image_dir": "data/cc12m/images",
+    "num_workers": 4,
+    "prefetch_factor": 2
+  },
+  "training": {
+    "device": "cuda",
+    "batch_size": 16,
+    "gradient_accumulation_steps": 1,
+    "learning_rate": 1e-4,
+    "weight_decay": 0.01,
+    "grad_clip": 1.0,
+    "num_epochs": 10,
+    "max_steps": 50000,
+    "warmup_steps": 1000,
+    "use_amp": true,
+    "freeze_vision_stages": 8,
+    "freeze_lm_layers": 26
+  },
+  "loss_weights": {
+    "lm_loss": 1.0,
+    "memory_loss": 0.1,
+    "scope_loss": 0.01
+  },
+  "optimization": {
+    "optimizer": "adamw",
+    "lr_scheduler": "cosine",
+    "min_lr": 1e-6,
+    "beta1": 0.9,
+    "beta2": 0.999,
+    "eps": 1e-8
+  },
+  "logging": {
+    "log_interval": 100,
+    "val_interval": 1000,
+    "save_interval": 5000,
+    "visualize_interval": 5000,
+    "use_wandb": true,
+    "wandb_entity": "aman-derax20",
+    "wandb_project": "MicroVLM-M"
+  },
+  "checkpointing": {
+    "checkpoint_dir": "checkpoints/stage1",
+    "save_best": true,
+    "save_last": true,
+    "keep_n_checkpoints": 3
+  }
+}

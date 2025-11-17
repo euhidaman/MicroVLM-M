@@ -1,0 +1,53 @@
+{
+  "bitnet": {
+    "hidden_size": 2560,
+    "num_layers": 30,
+    "num_attention_heads": 20,
+    "num_key_value_heads": 5,
+    "head_dim": 128,
+    "intermediate_size": 6912,
+    "vocab_size": 128256,
+    "max_position_embeddings": 4096,
+    "rope_theta": 500000.0,
+    "rms_norm_eps": 1e-6,
+    "tie_word_embeddings": false
+  },
+  "deit_tiny": {
+    "image_size": 224,
+    "patch_size": 16,
+    "num_patches": 196,
+    "embed_dim": 192,
+    "num_layers": 12,
+    "num_heads": 3,
+    "mlp_ratio": 4.0
+  },
+  "adapter": {
+    "input_dim": 192,
+    "output_dim": 2560,
+    "num_patches": 196,
+    "k_prefix": 25,
+    "use_mlp": true,
+    "mlp_hidden_dim": 512,
+    "dropout": 0.1
+  },
+  "memory": {
+    "num_slots": 128,
+    "slot_dim": 2560,
+    "kv_dim": 153600,
+    "num_iterations": 3,
+    "noise_std": 0.01,
+    "learning_rate": 0.001
+  },
+  "scope_net": {
+    "input_dim": 2560,
+    "hidden_dim": 256,
+    "num_layers": 2,
+    "dropout": 0.1
+  },
+  "attention_visualizer": {
+    "num_slices": 256,
+    "clip_threshold": 0.01,
+    "num_integration_points": 17,
+    "use_gaussian_sampling": true
+  }
+}
