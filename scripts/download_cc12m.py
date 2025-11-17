@@ -15,7 +15,81 @@ from functools import partial
 import argparse
 
 
-def download_image(item, save_dir, timeout=5):
+import os
+import sys
+import argparse
+from pathlib import Path
+import requests
+from PIL import Image
+from io import BytesIO
+import json
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm
+import pandas as pd
+
+
+def download_tsv_from_gdrive(file_id, output_path):
+    """Download TSV file from Google Drive"""
+    print("Downloading CC12M TSV file from Google Drive...")
+    
+    url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&authuser=0&confirm=t"
+    
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    response = requests.get(url, stream=True)
+    total_size = int(response.headers.get('content-length', 0))
+    
+    with open(output_path, 'wb') as f, tqdm(
+        desc="Downloading TSV",
+        total=total_size,
+        unit='iB',
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as pbar:
+        for chunk in response.iter_content(chunk_size=8192):
+            size = f.write(chunk)
+            pbar.update(size)
+    
+    print(f"TSV file downloaded to: {output_path}")
+    return output_path
+
+
+def verify_tsv(tsv_path):
+    """Verify CC12M TSV file"""
+    if not os.path.exists(tsv_path):
+        print(f"ERROR: TSV file not found: {tsv_path}")
+        return False
+    
+    file_size = os.path.getsize(tsv_path)
+    print(f"\nTSV file size: {file_size / (1024**2):.2f} MB")
+    
+    if file_size < 1024 * 1024:
+        print("WARNING: TSV file seems too small!")
+        return False
+    
+    print("Reading first 5 lines...")
+    with open(tsv_path, 'r', encoding='utf-8', errors='ignore') as f:
+        for i, line in enumerate(f):
+            if i < 5:
+                print(f"  Line {i+1}: {line.strip()[:80]}...")
+            if i == 4:
+                break
+    
+    print("Counting total lines...")
+    with open(tsv_path, 'r', encoding='utf-8', errors='ignore') as f:
+        total_lines = sum(1 for _ in f)
+    
+    print(f"Total samples in TSV: {total_lines:,}")
+    
+    if total_lines < 100:
+        print("WARNING: Very few samples!")
+        return False
+    
+    print("✓ TSV file verification passed\n")
+    return True
+
+
+def download_image(args):
     """
     Download single image
 
@@ -209,7 +283,8 @@ def create_train_val_split(metadata_path, output_dir, val_ratio=0.05):
 def main():
     parser = argparse.ArgumentParser(
         description="Download and prepare CC12M dataset")
-    parser.add_argument('--tsv_path', type=str, help='Path to cc12m.tsv file')
+    parser.add_argument('--tsv_path', type=str, default=None,
+                        help='Path to cc12m.tsv file (auto-downloads if not provided)')
     parser.add_argument('--output_dir', type=str,
                         default='data/cc12m', help='Output directory')
     parser.add_argument('--max_samples', type=int,
@@ -218,12 +293,32 @@ def main():
                         help='Number of download workers')
     parser.add_argument('--val_ratio', type=float,
                         default=0.05, help='Validation split ratio')
-    parser.add_argument('--download_instructions',
-                        action='store_true', help='Show download instructions')
+    parser.add_argument('--gdrive_file_id', type=str,
+                        default='1mZ_sHAp7jpMfFVY2TFN9wZioYujoYfCL',
+                        help='Google Drive file ID for CC12M TSV')
+    parser.add_argument('--skip_download_tsv', action='store_true',
+                        help='Skip downloading TSV file (use existing)')
 
     args = parser.parse_args()
 
-    if args.download_instructions or args.tsv_path is None:
+    # Determine TSV path
+    if args.tsv_path is None:
+        args.tsv_path = os.path.join(args.output_dir, 'cc12m.tsv')
+
+    # Download TSV if needed
+    if not args.skip_download_tsv:
+        if not os.path.exists(args.tsv_path) or os.path.getsize(args.tsv_path) < 1024 * 1024:
+            download_tsv_from_gdrive(args.gdrive_file_id, args.tsv_path)
+        else:
+            print(f"TSV file already exists: {args.tsv_path}")
+
+    # Verify TSV
+    if not verify_tsv(args.tsv_path):
+        print("ERROR: TSV verification failed!")
+        print("Try deleting the file and running again to re-download.")
+        sys.exit(1)
+
+    if args.tsv_path is None:
         download_cc12m_metadata(args.output_dir)
         return
 
