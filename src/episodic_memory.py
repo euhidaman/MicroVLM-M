@@ -32,8 +32,13 @@ class EpisodicMemory(nn.Module):
 
         # Load configuration
         if config_dict is not None:
-            config = config_dict
-            bitnet_config = config_dict.get('bitnet', {})
+            # Check if config_dict has nested structure
+            if 'memory' in config_dict:
+                config = config_dict['memory']
+                bitnet_config = config_dict.get('bitnet', {})
+            else:
+                config = config_dict
+                bitnet_config = {}
         elif config_path is not None:
             with open(config_path, 'r') as f:
                 master_config = json.load(f)
