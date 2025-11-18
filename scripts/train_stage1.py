@@ -168,8 +168,9 @@ class Stage1Trainer:
 
             # Reconstruct input from memory
             # Simple reconstruction: mean of memory should approximate input embedding
-            prefix_embeds = self.model.encode_images(images)
-            target_embed = prefix_embeds.mean(dim=1)  # (batch, hidden_dim)
+            with torch.no_grad():
+                prefix_embeds = self.model.encode_images(images)
+                target_embed = prefix_embeds.mean(dim=1).detach()  # (batch, hidden_dim)
             recon_embed = memory_mean.mean(dim=1)  # (batch, c_mem)
 
             memory_loss = self.alignment_loss_fn(recon_embed, target_embed)
