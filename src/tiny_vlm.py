@@ -120,6 +120,18 @@ class TinyVLM(nn.Module):
 
         print("TinyVLM initialized successfully")
 
+    def _detach_memory_state(self, memory_state):
+        """Detach tensors inside memory state to avoid graph retention"""
+        if memory_state is None:
+            return None
+        detached = []
+        for tensor in memory_state:
+            if torch.is_tensor(tensor):
+                detached.append(tensor.detach())
+            else:
+                detached.append(tensor)
+        return tuple(detached)
+
     def encode_images(self, images):
         """
         Encode images to prefix tokens
@@ -273,6 +285,7 @@ class TinyVLM(nn.Module):
                     context_embed.unsqueeze(0),
                     batch_size=batch_size
                 )
+                self.memory_state = self._detach_memory_state(self.memory_state)
 
             # Read memory
             z_retrieved, Z_r_kv, dkl_w = self.episodic_memory.read(
@@ -331,6 +344,7 @@ class TinyVLM(nn.Module):
             context_embed.unsqueeze(0),
             batch_size=images.size(0)
         )
+        self.memory_state = self._detach_memory_state(self.memory_state)
 
         return dkl_M
 
