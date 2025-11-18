@@ -40,8 +40,8 @@ class Stage1Trainer:
         # Freeze components
         print("Freezing vision encoder and language model...")
         self.model.freeze_vision_encoder(
-            num_stages=config['freeze_vision_stages'])
-        self.model.freeze_language_model(num_layers=config['freeze_lm_layers'])
+            num_stages=config['training']['freeze_vision_stages'])
+        self.model.freeze_language_model(num_layers=config['training']['freeze_lm_layers'])
 
         # Print trainable parameters
         trainable_params = sum(p.numel()
@@ -58,58 +58,61 @@ class Stage1Trainer:
         trainable = [p for p in self.model.parameters() if p.requires_grad]
         self.optimizer = optim.AdamW(
             trainable,
-            lr=config['learning_rate'],
-            weight_decay=config['weight_decay'],
-            betas=(0.9, 0.999)
+            lr=config['training']['learning_rate'],
+            weight_decay=config['training']['weight_decay'],
+            betas=(config['optimization']['beta1'], config['optimization']['beta2']),
+            eps=config['optimization']['eps']
         )
 
         # Scheduler
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer,
-            T_max=config['max_steps'],
-            eta_min=config['learning_rate'] * 0.1
+            T_max=config['training']['max_steps'],
+            eta_min=config['optimization']['min_lr']
         )
 
         # Dataset
         print("Loading dataset...")
         self.train_dataset = CC12MDataset(
-            metadata_path=config['train_metadata_path'],
+            metadata_path=config['data']['train_metadata'],
             image_size=224
         )
 
         self.val_dataset = CC12MDataset(
-            metadata_path=config['val_metadata_path'],
+            metadata_path=config['data']['val_metadata'],
             image_size=224
         )
 
         self.train_loader = DataLoader(
             self.train_dataset,
-            batch_size=config['batch_size'],
+            batch_size=config['training']['batch_size'],
             shuffle=True,
-            num_workers=config['num_workers'],
+            num_workers=config['data']['num_workers'],
             collate_fn=CC12MDataset.collate_fn,
-            pin_memory=True
+            pin_memory=True,
+            prefetch_factor=config['data'].get('prefetch_factor', 2)
         )
 
         self.val_loader = DataLoader(
             self.val_dataset,
-            batch_size=config['batch_size'],
+            batch_size=config['training']['batch_size'],
             shuffle=False,
-            num_workers=config['num_workers'],
+            num_workers=config['data']['num_workers'],
             collate_fn=CC12MDataset.collate_fn,
-            pin_memory=True
+            pin_memory=True,
+            prefetch_factor=config['data'].get('prefetch_factor', 2)
         )
 
         # WandB
-        if config['use_wandb']:
-            counter = WandBRunCounter(project_name='MicroVLM-M')
+        if config['logging']['use_wandb']:
+            counter = WandBRunCounter(project_name=config['logging']['wandb_project'])
             run_name, run_number = counter.get_next_run_name('stage1')
 
             wandb.init(
-                project='MicroVLM-M',
+                project=config['logging']['wandb_project'],
                 name=run_name,
                 config=config,
-                entity=config['wandb_entity']
+                entity=config['logging']['wandb_entity']
             )
             print(f"WandB run: {run_name} (#{run_number})")
 
@@ -118,7 +121,7 @@ class Stage1Trainer:
 
     def compute_loss(self, batch):
         """
-        Compute training loss
+        Compute training loss with EVO-1 style alignment
 
         Returns:
             total_loss, loss_dict
@@ -126,11 +129,12 @@ class Stage1Trainer:
         images = batch['images'].to(self.device)
         token_ids = batch['token_ids'].to(self.device)
 
-        # Forward pass
+        # Forward pass with EVO-1 alignment
         logits, memory_state, attn_weights, metadata = self.model(
             images,
             token_ids[:, :-1],  # Input tokens (exclude last)
             use_memory=True,
+            use_fusion=self.config.get('use_cross_modal_fusion', False),
             return_attention=False
         )
 
@@ -145,6 +149,12 @@ class Stage1Trainer:
         lm_targets_flat = lm_targets.view(-1)
 
         lm_loss = self.lm_loss_fn(lm_logits_flat, lm_targets_flat)
+
+        # EVO-1 Image-Text Alignment Loss (contrastive learning)
+        alignment_loss, similarity_matrix = self.model.compute_alignment_loss(
+            images,
+            token_ids
+        )
 
         # Memory reconstruction loss (encourage meaningful memory)
         if memory_state is not None:
@@ -165,16 +175,18 @@ class Stage1Trainer:
         # Encourage exploration
         scope_loss = torch.mean((scope_prob - 0.5) ** 2)
 
-        # Total loss
+        # Total loss (including EVO-1 alignment)
         total_loss = (
-            self.config['lm_loss_weight'] * lm_loss +
-            self.config['memory_loss_weight'] * memory_loss +
-            self.config['scope_loss_weight'] * scope_loss
+            self.config['loss_weights']['lm_loss'] * lm_loss +
+            self.config['loss_weights'].get('alignment_loss', 0.5) * alignment_loss +
+            self.config['loss_weights']['memory_loss'] * memory_loss +
+            self.config['loss_weights']['scope_loss'] * scope_loss
         )
 
         loss_dict = {
             'total_loss': total_loss.item(),
             'lm_loss': lm_loss.item(),
+            'alignment_loss': alignment_loss.item(),
             'memory_loss': memory_loss.item(),
             'scope_loss': scope_loss.item(),
             'scope_decision': metadata['scope_decision'].mean().item()
@@ -192,10 +204,10 @@ class Stage1Trainer:
         loss.backward()
 
         # Gradient clipping
-        if self.config['grad_clip'] > 0:
+        if self.config['training']['grad_clip'] > 0:
             torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(),
-                self.config['grad_clip']
+                self.config['training']['grad_clip']
             )
 
         self.optimizer.step()
@@ -215,7 +227,7 @@ class Stage1Trainer:
                 total_loss += loss_dict['total_loss']
                 num_batches += 1
 
-                if num_batches >= self.config['val_batches']:
+                if num_batches >= 100:  # Validation batches
                     break
 
         avg_loss = total_loss / num_batches
@@ -223,9 +235,9 @@ class Stage1Trainer:
 
     def train(self):
         """Main training loop"""
-        print("Starting Stage 1 training...")
+        print("Starting Stage 1 training (EVO-1 alignment + Larimar memory)...")
 
-        for epoch in range(self.config['num_epochs']):
+        for epoch in range(self.config['training']['num_epochs']):
             pbar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}")
 
             for batch in pbar:
@@ -237,14 +249,16 @@ class Stage1Trainer:
                 pbar.set_postfix({
                     'loss': f"{loss_dict['total_loss']:.4f}",
                     'lm': f"{loss_dict['lm_loss']:.4f}",
+                    'align': f"{loss_dict['alignment_loss']:.4f}",
                     'mem': f"{loss_dict['memory_loss']:.4f}"
                 })
 
                 # Log to WandB
-                if self.config['use_wandb'] and self.global_step % self.config['log_interval'] == 0:
+                if self.config['logging']['use_wandb'] and self.global_step % self.config['logging']['log_interval'] == 0:
                     wandb.log({
                         'train/total_loss': loss_dict['total_loss'],
                         'train/lm_loss': loss_dict['lm_loss'],
+                        'train/alignment_loss': loss_dict['alignment_loss'],
                         'train/memory_loss': loss_dict['memory_loss'],
                         'train/scope_loss': loss_dict['scope_loss'],
                         'train/scope_decision': loss_dict['scope_decision'],
@@ -253,11 +267,11 @@ class Stage1Trainer:
                     })
 
                 # Validation
-                if self.global_step % self.config['val_interval'] == 0:
+                if self.global_step % self.config['logging']['val_interval'] == 0:
                     val_loss = self.validate()
                     print(f"\nValidation loss: {val_loss:.4f}")
 
-                    if self.config['use_wandb']:
+                    if self.config['logging']['use_wandb']:
                         wandb.log({
                             'val/loss': val_loss,
                             'global_step': self.global_step
@@ -269,11 +283,11 @@ class Stage1Trainer:
                         self.save_checkpoint('best')
 
                 # Save checkpoint
-                if self.global_step % self.config['save_interval'] == 0:
+                if self.global_step % self.config['logging']['save_interval'] == 0:
                     self.save_checkpoint(f'step_{self.global_step}')
 
                 # Max steps
-                if self.global_step >= self.config['max_steps']:
+                if self.global_step >= self.config['training']['max_steps']:
                     print("Reached max steps")
                     return
 
@@ -281,7 +295,7 @@ class Stage1Trainer:
 
     def save_checkpoint(self, name):
         """Save model checkpoint"""
-        save_dir = os.path.join(self.config['checkpoint_dir'], 'stage1', name)
+        save_dir = os.path.join(self.config['checkpointing']['checkpoint_dir'], name)
         os.makedirs(save_dir, exist_ok=True)
 
         checkpoint = {
@@ -299,48 +313,19 @@ class Stage1Trainer:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Stage 1 Training")
+    parser = argparse.ArgumentParser(description="Stage 1 Training (EVO-1 Alignment + Larimar Memory)")
     parser.add_argument('--config', type=str, default='configs/stage1_config.json',
                         help='Training configuration file')
     args = parser.parse_args()
 
     # Load config
-    if os.path.exists(args.config):
-        with open(args.config, 'r') as f:
-            config = json.load(f)
-    else:
-        # Default config
-        config = {
-            'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-            'model_config_path': 'configs/model_config.json',
-            'train_metadata_path': 'data/cc12m/train_metadata.json',
-            'val_metadata_path': 'data/cc12m/val_metadata.json',
-            'checkpoint_dir': 'checkpoints',
-            'batch_size': 16,
-            'num_workers': 4,
-            'learning_rate': 1e-4,
-            'weight_decay': 0.01,
-            'grad_clip': 1.0,
-            'num_epochs': 10,
-            'max_steps': 50000,
-            'log_interval': 100,
-            'val_interval': 1000,
-            'val_batches': 100,
-            'save_interval': 5000,
-            'freeze_vision_stages': 8,
-            'freeze_lm_layers': 26,
-            'lm_loss_weight': 1.0,
-            'memory_loss_weight': 0.1,
-            'scope_loss_weight': 0.01,
-            'use_wandb': True,
-            'wandb_entity': 'aman-derax20'
-        }
-
-        # Save default config
-        os.makedirs(os.path.dirname(args.config), exist_ok=True)
-        with open(args.config, 'w') as f:
-            json.dump(config, f, indent=2)
-        print(f"Created default config: {args.config}")
+    if not os.path.exists(args.config):
+        print(f"Config file not found: {args.config}")
+        print("Please create a config file or use the provided configs/stage1_config.json")
+        sys.exit(1)
+    
+    with open(args.config, 'r') as f:
+        config = json.load(f)
 
     # Train
     trainer = Stage1Trainer(config)

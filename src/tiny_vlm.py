@@ -15,6 +15,7 @@ from multimodal_adapter import MultimodalAdapter
 from episodic_memory import EpisodicMemory
 from scope_net import ScopeNet
 from attention_visualizer import AttentionVisualizer
+from image_text_alignment import ImageTextAlignmentModule, CrossModalFusionModule
 
 
 class TinyVLM(nn.Module):
@@ -79,6 +80,22 @@ class TinyVLM(nn.Module):
         # Attention visualizer (for monitoring)
         self.attention_visualizer = AttentionVisualizer(
             config_dict=self.config['attention_viz'])
+
+        # EVO-1 Image-Text Alignment (contrastive learning)
+        self.image_text_alignment = ImageTextAlignmentModule(
+            image_dim=self.config['deit_tiny']['embed_dim'],
+            text_dim=self.config['bitnet']['hidden_size'],
+            projection_dim=self.config['alignment'].get('projection_dim', 512),
+            temperature=self.config['alignment'].get('temperature', 0.07)
+        )
+
+        # Cross-modal fusion (following EVO-1 methodology)
+        self.cross_modal_fusion = CrossModalFusionModule(
+            image_dim=self.config['deit_tiny']['embed_dim'],
+            text_dim=self.config['bitnet']['hidden_size'],
+            num_heads=self.config['alignment'].get('fusion_heads', 8),
+            num_layers=self.config['alignment'].get('fusion_layers', 2)
+        )
 
         # Special tokens
         self.bos_token_id = 1
@@ -151,7 +168,35 @@ class TinyVLM(nn.Module):
 
         return fused_embeds, image_token_range, text_token_range
 
-    def forward(self, images, text_token_ids, use_memory=True, return_attention=False):
+    def compute_alignment_loss(self, images, text_token_ids):
+        """
+        Compute EVO-1 style contrastive image-text alignment loss
+
+        Args:
+            images: (batch, 3, H, W) images
+            text_token_ids: (batch, text_len) text tokens
+
+        Returns:
+            alignment_loss: contrastive loss between image and text
+            similarity_matrix: image-text similarity
+        """
+        # Encode images to patch embeddings (before pooling)
+        images = self.image_preprocessor(images).to(self.device)
+        image_embeds = self.vision_encoder(images)  # (batch, num_patches, embed_dim)
+
+        # Get text embeddings from BitNet
+        text_embeds = self.language_model.tok_embeddings(text_token_ids)  # (batch, text_len, hidden_dim)
+
+        # Compute contrastive alignment loss (EVO-1 methodology)
+        alignment_loss, similarity = self.image_text_alignment(
+            image_embeds,
+            text_embeds,
+            return_similarity=True
+        )
+
+        return alignment_loss, similarity
+
+    def forward(self, images, text_token_ids, use_memory=True, use_fusion=False, return_attention=False):
         """
         Forward pass
 
@@ -159,6 +204,7 @@ class TinyVLM(nn.Module):
             images: (batch, 3, H, W) images
             text_token_ids: (batch, text_len) text tokens
             use_memory: whether to use episodic memory
+            use_fusion: whether to use cross-modal fusion (EVO-1 style)
             return_attention: whether to return attention weights
 
         Returns:
@@ -171,10 +217,34 @@ class TinyVLM(nn.Module):
         # Encode images to prefix tokens
         prefix_tokens = self.encode_images(images)
 
-        # Build fused sequence
-        fused_embeds, image_token_range, text_token_range = self.build_fused_sequence(
-            prefix_tokens, text_token_ids
-        )
+        # Optional: Apply cross-modal fusion (EVO-1 methodology)
+        if use_fusion:
+            # Get raw patch embeddings
+            images_preprocessed = self.image_preprocessor(images).to(self.device)
+            patch_embeds = self.vision_encoder(images_preprocessed)
+            
+            # Get text embeddings
+            text_embeds = self.language_model.tok_embeddings(text_token_ids)
+            
+            # Apply cross-attention fusion
+            text_embeds_fused = self.cross_modal_fusion(patch_embeds, text_embeds)
+            
+            # Build sequence with fused text embeddings
+            bos_embeds = self.language_model.tok_embeddings(
+                torch.full((batch_size, 1), self.bos_token_id, device=self.device)
+            )
+            eos_embeds = self.language_model.tok_embeddings(
+                torch.full((batch_size, 1), self.eos_token_id, device=self.device)
+            )
+            
+            fused_embeds = torch.cat([bos_embeds, prefix_tokens, text_embeds_fused, eos_embeds], dim=1)
+            image_token_range = (1, 1 + prefix_tokens.size(1))
+            text_token_range = (1 + prefix_tokens.size(1), 1 + prefix_tokens.size(1) + text_token_ids.size(1))
+        else:
+            # Build fused sequence (simple concatenation)
+            fused_embeds, image_token_range, text_token_range = self.build_fused_sequence(
+                prefix_tokens, text_token_ids
+            )
 
         # Get context embedding for scope decision (use mean of prefix tokens)
         context_embed = prefix_tokens.mean(dim=1)  # (batch, hidden_dim)

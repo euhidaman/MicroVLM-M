@@ -31,12 +31,17 @@
     "dropout": 0.1
   },
   "memory": {
-    "num_slots": 128,
-    "slot_dim": 2560,
-    "kv_dim": 153600,
-    "num_iterations": 3,
-    "noise_std": 0.01,
-    "learning_rate": 0.001
+    "k_mem": 128,
+    "c_mem": 2560,
+    "num_layers": 30,
+    "num_heads": 20,
+    "head_dim": 128,
+    "observation_noise_std": 0.01,
+    "direct_writing": true,
+    "ordering": false,
+    "pseudoinverse_approx_step": 3,
+    "w_logvar_setting": 0,
+    "deterministic": false
   },
   "scope_net": {
     "input_dim": 2560,
@@ -44,7 +49,14 @@
     "num_layers": 2,
     "dropout": 0.1
   },
-  "attention_visualizer": {
+  "alignment": {
+    "projection_dim": 512,
+    "temperature": 0.07,
+    "fusion_heads": 8,
+    "fusion_layers": 2,
+    "description": "EVO-1 style image-text alignment via contrastive learning"
+  },
+  "attention_viz": {
     "num_slices": 256,
     "clip_threshold": 0.01,
     "num_integration_points": 17,

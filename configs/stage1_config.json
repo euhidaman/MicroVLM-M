@@ -23,9 +23,11 @@
   },
   "loss_weights": {
     "lm_loss": 1.0,
+    "alignment_loss": 0.5,
     "memory_loss": 0.1,
     "scope_loss": 0.01
   },
+  "use_cross_modal_fusion": false,
   "optimization": {
     "optimizer": "adamw",
     "lr_scheduler": "cosine",

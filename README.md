@@ -7,15 +7,20 @@ A compact multimodal AI combining DeiT-Tiny vision encoder, BitNet language mode
 MicroVLM-M integrates:
 - **DeiT-Tiny**: Efficient vision encoder (5.7M params)
 - **BitNet-3B**: 1.58-bit quantized language model (3B params, ~200MB quantized)
-- **Episodic Memory**: Larimar-style memory for context enhancement
+- **EVO-1 Alignment**: Contrastive image-text learning methodology
+- **Episodic Memory**: Larimar GPM with pseudoinverse addressing
 - **Multimodal Adapter**: Projects vision to language space
 - **ScopeNet**: Decides when to apply memory
 - **Attention Visualization**: Monitors learning with statistical analysis
+- **CC12M Dataset**: 12.4M image-caption pairs
 
 ## Architecture Summary
 
 ```
 Image (224x224) → DeiT-Tiny → Patch Embeddings (196, 192)
+                               ↓
+                    EVO-1 Image-Text Alignment
+                     (Contrastive Learning)
                                ↓
                           Multimodal Adapter
                                ↓
@@ -23,10 +28,15 @@ Image (224x224) → DeiT-Tiny → Patch Embeddings (196, 192)
                                ↓
 [BOS] + Prefix + Text Tokens + [EOS] → BitNet → Logits
          ↑
-   Episodic Memory (KV Injection)
+   Episodic Memory (Larimar GPM, KV Injection)
          ↑
       ScopeNet (Decision)
 ```
+
+**Key Methodologies**:
+- **EVO-1 Alignment**: Contrastive image-text learning (CLIP-style InfoNCE loss)
+- **Larimar Memory**: Gaussian Process Memory with pseudoinverse addressing
+- **CC12M Dataset**: 12.4M image-caption pairs for training
 
 Full architecture details: `architecture.md`
 
@@ -45,7 +55,8 @@ MicroVLM-M/
 │   ├── bitnet_model.py         # BitNet implementation
 │   ├── deit_encoder.py         # DeiT-Tiny vision encoder
 │   ├── multimodal_adapter.py   # Vision-language adapter
-│   ├── episodic_memory.py      # Memory module
+│   ├── image_text_alignment.py # EVO-1 contrastive alignment
+│   ├── episodic_memory.py      # Larimar GPM memory module
 │   ├── scope_net.py            # Memory scope classifier
 │   ├── attention_visualizer.py # Attention analysis and visualization
 │   ├── dataset.py              # CC12M dataset loader
@@ -228,7 +239,7 @@ Edit `configs/stage1_config.json` and set:
 
 ### Step 5: Stage 1 Training
 
-**Train adapters, memory, and ScopeNet with frozen vision and language backbones**:
+**Train adapters, memory, and ScopeNet with EVO-1 alignment and Larimar memory learning**:
 
 ```bash
 python scripts/train_stage1.py --config configs/stage1_config.json
@@ -247,12 +258,20 @@ python scripts/train_stage1.py --config configs/stage1_config.json
   "freeze_vision_stages": 8,
   "freeze_lm_layers": 26,
   "lm_loss_weight": 1.0,
+  "alignment_loss_weight": 0.5,
   "memory_loss_weight": 0.1,
   "scope_loss_weight": 0.01,
+  "use_cross_modal_fusion": false,
   "use_wandb": true,
   "wandb_entity": "aman-derax20"
 }
 ```
+
+**Loss Components**:
+- **Language Modeling Loss** (weight: 1.0): Next-token prediction
+- **Alignment Loss** (weight: 0.5): EVO-1 contrastive image-text alignment (InfoNCE)
+- **Memory Loss** (weight: 0.1): Larimar GPM KL divergence regularization
+- **Scope Loss** (weight: 0.01): Balanced memory usage
 
 **Expected Behavior**:
 - WandB run created: `run_1_stage1` (or incremented number)

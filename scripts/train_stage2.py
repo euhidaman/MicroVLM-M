@@ -155,16 +155,19 @@ class Stage2Trainer:
         print(f"Val samples: {len(self.val_dataset)}")
 
     def compute_loss(self, batch):
+        """Compute training loss with EVO-1 alignment"""
         images, text_tokens, attention_mask = batch
         images = images.to(self.device)
         text_tokens = text_tokens.to(self.device)
         attention_mask = attention_mask.to(self.device)
 
         with autocast(enabled=self.config['training']['use_amp']):
+            # Forward pass with EVO-1 fusion
             logits, memory_state, attn_weights, metadata = self.model(
                 images,
                 text_tokens,
                 use_memory=True,
+                use_fusion=self.config.get('use_cross_modal_fusion', False),
                 return_attention=True
             )
 
@@ -175,6 +178,12 @@ class Stage2Trainer:
                 shift_logits.view(-1, shift_logits.size(-1)),
                 shift_labels.view(-1),
                 ignore_index=0
+            )
+
+            # EVO-1 Image-Text Alignment Loss
+            alignment_loss, _ = self.model.compute_alignment_loss(
+                images,
+                text_tokens
             )
 
             if memory_state is not None and 'memory_vector' in memory_state:
@@ -191,17 +200,18 @@ class Stage2Trainer:
             weights = self.config['loss_weights']
             total_loss = (
                 weights['lm_loss'] * lm_loss +
+                weights.get('alignment_loss', 0.3) * alignment_loss +
                 weights['memory_loss'] * memory_loss +
                 weights['scope_loss'] * scope_loss
             )
 
-        return total_loss, lm_loss, memory_loss, scope_loss, scope_decision.mean()
+        return total_loss, lm_loss, alignment_loss, memory_loss, scope_loss, scope_decision.mean()
 
     def train_step(self, batch):
         self.model.train()
         self.optimizer.zero_grad()
 
-        total_loss, lm_loss, memory_loss, scope_loss, scope_decision = self.compute_loss(
+        total_loss, lm_loss, alignment_loss, memory_loss, scope_loss, scope_decision = self.compute_loss(
             batch)
 
         self.scaler.scale(total_loss).backward()
@@ -222,6 +232,7 @@ class Stage2Trainer:
         return {
             'total_loss': total_loss.item(),
             'lm_loss': lm_loss.item(),
+            'alignment_loss': alignment_loss.item(),
             'memory_loss': memory_loss.item(),
             'scope_loss': scope_loss.item(),
             'scope_decision': scope_decision.item(),
@@ -235,7 +246,7 @@ class Stage2Trainer:
         num_batches = 0
 
         for batch in tqdm(self.val_loader, desc="Validation", leave=False):
-            loss, _, _, _, _ = self.compute_loss(batch)
+            loss, _, _, _, _, _ = self.compute_loss(batch)
             total_loss += loss.item()
             num_batches += 1
 
@@ -290,6 +301,7 @@ class Stage2Trainer:
                     epoch_pbar.set_postfix({
                         'loss': f"{metrics['total_loss']:.4f}",
                         'lm': f"{metrics['lm_loss']:.4f}",
+                        'align': f"{metrics['alignment_loss']:.4f}",
                         'mem': f"{metrics['memory_loss']:.4f}",
                         'lr': f"{metrics['lr']:.2e}"
                     })
@@ -298,6 +310,7 @@ class Stage2Trainer:
                         wandb.log({
                             'train/total_loss': metrics['total_loss'],
                             'train/lm_loss': metrics['lm_loss'],
+                            'train/alignment_loss': metrics['alignment_loss'],
                             'train/memory_loss': metrics['memory_loss'],
                             'train/scope_loss': metrics['scope_loss'],
                             'train/scope_decision': metrics['scope_decision'],

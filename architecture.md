@@ -71,7 +71,55 @@ Output: (batch, 25, 2560) prefix tokens
 (B, 25, 2560)  # Final prefix tokens
 ```
 
-### 3. Language Backbone: BitNet
+### 3. Image-Text Alignment (EVO-1 Methodology)
+
+**Purpose**: Learn aligned vision-language representations via contrastive learning
+
+**Methodology** (following EVO-1 exact approach):
+```
+1. Separate Projection Heads:
+   - Image Projection: 192 -> 512 -> LayerNorm
+   - Text Projection: 2560 -> 512 -> LayerNorm
+
+2. L2 Normalization of features
+
+3. Similarity Matrix:
+   S = temperature * (image_features @ text_features.T)
+   temperature = learnable parameter (initialized to 1/0.07)
+
+4. Contrastive Loss (InfoNCE / CLIP-style):
+   - Positive pairs on diagonal (matching image-text)
+   - Image-to-Text: CrossEntropy(S, labels)
+   - Text-to-Image: CrossEntropy(S.T, labels)
+   - Total Loss = (I2T + T2I) / 2
+```
+
+**Cross-Modal Fusion** (Optional, EVO-1 style):
+```
+Instead of simple concatenation, use cross-attention:
+
+1. Project image patches to text dimension: 192 -> 2560
+2. Cross-Attention Layers (2 layers):
+   - Query: text embeddings
+   - Key/Value: image embeddings
+   - Multi-head attention (8 heads)
+   - Residual + LayerNorm
+   - FFN (2560 -> 10240 -> 2560)
+   - Residual + LayerNorm
+3. Output: fused text embeddings (B, seq_len, 2560)
+```
+
+**Training Loss**:
+```
+Alignment Loss = 0.5 * [
+  CrossEntropy(image->text similarity, labels) +
+  CrossEntropy(text->image similarity, labels)
+]
+```
+
+**Parameters**: ~1.5M (projections + cross-attention layers)
+
+### 4. Language Backbone: BitNet
 
 **Model**: BitNet-3B-1.58bit
 
@@ -146,62 +194,102 @@ Total sequence length: 1 + 25 + T + 1 = T + 27
 
 **Attention Pattern**: Full causal attention across all tokens
 
-### 5. Episodic Memory (Larimar-style)
+### 5. Episodic Memory (Larimar Exact Architecture)
 
-**Purpose**: Provide additional context via KV cache injection
+**Purpose**: Store and retrieve contextual information using Gaussian Process Memory
+
+**Larimar GPM Architecture** (exact implementation):
 
 **Memory Matrix**:
-- Shape: M ∈ ℝ^(K_mem × C_mem)
-- K_mem = 128 memory slots
-- C_mem = 2560 (BitNet hidden dimension)
+- M: (K_mem, C_mem) = (128, 2560)
+- Prior: M ~ N(memory_mean, diag(exp(memory_logvar)))
+- memory_mean: learnable parameter (128, 2560)
+- memory_logvar: fixed parameter (128,) initialized to 0
 
-**Write Mechanism**:
+**Write Mechanism** (Sherman-Morrison Update):
 ```
-1. Input: z_sequence (seq_len, batch, 2560)
-2. Add Gaussian noise: σ = 0.01
-3. Compute addressing weights w using pseudoinverse:
+Direct Writing Mode (default):
+
+1. Add Gaussian noise to inputs:
+   z_noise = z + N(0, σ²)  where σ = 0.01
+
+2. Compute addressing weights via pseudoinverse:
    M_pinv = approx_pseudoinverse(M, steps=3)
-   w = z @ M_pinv
-   
-4. Update memory mean:
+   w = z_noise @ M_pinv  # (batch, seq_len, K_mem)
+
+3. Compute weight pseudoinverse:
    w_pinv = approx_pseudoinverse(w, steps=3)
-   M_new = w_pinv @ z
-   
-5. Output: (M_mean, M_cov)
+
+4. Update memory mean:
+   M_new = w_pinv @ z_noise  # (batch, K_mem, C_mem)
+
+5. KL Divergence Regularization:
+   KL(posterior || prior) for memory distribution
+```
+
+**Pseudoinverse Approximation** (Ben-Cohen Method):
+```python
+def approx_pseudoinverse(A, steps=3):
+    # Ben-Cohen iterative method
+    alpha = exp(ben_cohen_init).clamp(max=5e-4)  # ~5e-4
+    A_pinv = alpha * A.T
+    
+    for _ in range(steps):
+        A_pinv = 2*A_pinv - A_pinv @ A @ A_pinv
+    
+    return A_pinv
 ```
 
 **Read Mechanism**:
 ```
-1. Input: z_query (batch, 2560)
-2. Compute addressing:
-   w_mean = z_query @ M_pinv
-   
-3. Add noise (if not deterministic):
-   w = w_mean + σ_w * N(0,1)
-   
-4. Retrieve:
-   z_retrieved = w @ M_mean
-   
-5. Project to KV space:
-   Z_r_kv = W_M @ z_retrieved
-   
-   W_M: (2560 -> num_layers * num_heads * head_dim * 2)
-        (2560 -> 30 * 20 * 128 * 2 = 153,600)
+1. Compute addressing weights:
+   M_pinv = approx_pseudoinverse(M, steps=3)
+   w_mean = z_query @ M_pinv  # (batch, K_mem)
+
+2. Add noise if not deterministic:
+   w = w_mean + exp(0.5 * w_logvar) * N(0,1)
+
+3. Retrieve from memory:
+   z_retrieved = w @ M  # (batch, C_mem)
+
+4. Project to KV space:
+   Z_r_kv = W_M(z_retrieved)  # (batch, num_layers * num_heads * head_dim * 2)
 ```
 
-**KV Injection**:
+**KV Injection to BitNet Decoder**:
 ```
-For each layer l ∈ [0, 29]:
-  1. Extract: Z_r_kv -> (mem_K_l, mem_V_l)
-     Shape: (batch, num_heads, 1, head_dim)
-            (batch, 20, 1, 128)
+Projection W_M: C_mem -> (num_layers × num_heads × head_dim × 2)
+                2560 -> (30 × 20 × 128 × 2) = 153,600
+
+For each layer l:
+  Extract: Z_r_kv[layer=l, :, :]
+  Split: K_mem (batch, num_heads, 1, head_dim)
+         V_mem (batch, num_heads, 1, head_dim)
   
-  2. Concatenate to KV cache:
-     K_total = [mem_K_l, K_l]
-     V_total = [mem_V_l, V_l]
-     
-  3. Attention computes over extended context
+  Inject before self-attention:
+    K_cache = [K_mem, K_text]  # Concatenate
+    V_cache = [V_mem, V_text]
 ```
+
+**Memory Learning** (Larimar methodology):
+```
+1. Write Hook: After obtaining fused representation z_t
+   - Update memory: M_new = write(z_t)
+   - Compute KL: KL_M = KL(M_new || M_prior)
+
+2. Read Hook: Before decoder forward pass
+   - Retrieve: z_r = read(z_query, M)
+   - Project to KV: Z_r_kv = W_M(z_r)
+   - Inject to decoder attention
+
+3. Training Loss:
+   L_memory = KL_M + KL_w  # Regularize memory and addressing
+```
+
+**Parameters**:
+- Memory mean: 128 × 2560 = 327,680
+- W_M projection: 2560 × 153,600 = 393,216,000
+- Total: ~393.5M parameters
 
 **Memory Storage**:
 - Separate loadable file: ~0.3MB
