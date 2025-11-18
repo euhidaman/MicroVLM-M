@@ -203,21 +203,23 @@ class Stage1Trainer:
     def train_step(self, batch):
         """Single training step"""
         self.model.train()
-        self.optimizer.zero_grad()
 
         loss, loss_dict = self.compute_loss(batch)
 
         loss.backward()
 
-        # Gradient clipping
-        if self.config['training']['grad_clip'] > 0:
-            torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(),
-                self.config['training']['grad_clip']
-            )
+        # Gradient accumulation
+        if (self.global_step + 1) % self.config['training']['gradient_accumulation_steps'] == 0:
+            # Gradient clipping
+            if self.config['training']['grad_clip'] > 0:
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(),
+                    self.config['training']['grad_clip']
+                )
 
-        self.optimizer.step()
-        self.scheduler.step()
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+            self.scheduler.step()
 
         return loss_dict
 
