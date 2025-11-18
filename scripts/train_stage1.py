@@ -20,6 +20,8 @@ from tqdm import tqdm
 import wandb
 import argparse
 import json
+from huggingface_hub import HfApi, create_repo
+import glob
 
 
 class Stage1Trainer:
@@ -124,6 +126,21 @@ class Stage1Trainer:
 
         self.global_step = 0
         self.best_val_loss = float('inf')
+        
+        # Hugging Face Hub setup
+        self.hf_repo_id = config.get('huggingface', {}).get('repo_id', 'euhidaman/MicroVLM-M')
+        self.hf_upload = config.get('huggingface', {}).get('upload_enabled', True)
+        self.max_local_checkpoints = 3
+        
+        # Create HF repo if needed
+        if self.hf_upload:
+            try:
+                self.hf_api = HfApi()
+                create_repo(self.hf_repo_id, exist_ok=True, private=False)
+                print(f"Hugging Face repo: {self.hf_repo_id}")
+            except Exception as e:
+                print(f"Warning: HF Hub setup failed: {e}")
+                self.hf_upload = False
 
     def compute_loss(self, batch):
         """
@@ -254,6 +271,7 @@ class Stage1Trainer:
 
         for epoch in range(self.config['training']['num_epochs']):
             pbar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}")
+            epoch_start_step = self.global_step
 
             for batch in pbar:
                 loss_dict = self.train_step(batch)
@@ -305,6 +323,18 @@ class Stage1Trainer:
                 if self.global_step >= self.config['training']['max_steps']:
                     print("Reached max steps")
                     return
+            
+            # End of epoch - save and upload
+            print(f"\nEpoch {epoch+1} complete. Saving checkpoint...")
+            checkpoint_name = f"epoch_{epoch+1}"
+            self.save_checkpoint(checkpoint_name)
+            
+            # Upload to Hugging Face (overwrites previous)
+            if self.hf_upload:
+                self.upload_to_hf(checkpoint_name)
+            
+            # Clean up old local checkpoints
+            self.cleanup_old_checkpoints()
 
         print("Training complete!")
 
@@ -325,6 +355,67 @@ class Stage1Trainer:
         checkpoint_path = os.path.join(save_dir, 'checkpoint.pt')
         torch.save(checkpoint, checkpoint_path)
         print(f"Checkpoint saved: {checkpoint_path}")
+        return save_dir
+    
+    def upload_to_hf(self, checkpoint_name):
+        """Upload checkpoint to Hugging Face Hub (overwrites previous)"""
+        try:
+            checkpoint_dir = os.path.join(self.config['checkpointing']['checkpoint_dir'], checkpoint_name)
+            print(f"Uploading {checkpoint_name} to Hugging Face...")
+            
+            # Generate README with current training stats
+            self._generate_model_card(checkpoint_dir)
+            
+            self.hf_api.upload_folder(
+                folder_path=checkpoint_dir,
+                repo_id=self.hf_repo_id,
+                repo_type="model",
+                commit_message=f"Update model - {checkpoint_name} (step {self.global_step})"
+            )
+            print(f"Successfully uploaded to https://huggingface.co/{self.hf_repo_id}")
+        except Exception as e:
+            print(f"Warning: Failed to upload to HF Hub: {e}")
+    
+    def _generate_model_card(self, checkpoint_dir):
+        """Generate README.md with current training stats"""
+        from datetime import datetime
+        
+        # Read template
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'model_card_template.md')
+        with open(template_path, 'r') as f:
+            template = f.read()
+        
+        # Fill in current values
+        readme_content = template.replace(
+            '{timestamp}', datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+        ).replace(
+            '{global_step}', str(self.global_step)
+        ).replace(
+            '{val_loss:.4f}', f'{self.best_val_loss:.4f}'
+        )
+        
+        # Save to checkpoint directory
+        readme_path = os.path.join(checkpoint_dir, 'README.md')
+        with open(readme_path, 'w') as f:
+            f.write(readme_content)
+        print(f"Generated model card: {readme_path}")
+    
+    def cleanup_old_checkpoints(self):
+        """Keep only the N most recent epoch checkpoints locally"""
+        checkpoint_base = self.config['checkpointing']['checkpoint_dir']
+        epoch_dirs = glob.glob(os.path.join(checkpoint_base, 'epoch_*'))
+        
+        # Sort by modification time (newest first)
+        epoch_dirs.sort(key=os.path.getmtime, reverse=True)
+        
+        # Remove old checkpoints beyond max_local_checkpoints
+        for old_dir in epoch_dirs[self.max_local_checkpoints:]:
+            try:
+                import shutil
+                shutil.rmtree(old_dir)
+                print(f"Removed old checkpoint: {old_dir}")
+            except Exception as e:
+                print(f"Warning: Failed to remove {old_dir}: {e}")
 
 
 def main():

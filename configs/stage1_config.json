@@ -49,5 +49,9 @@
     "save_best": true,
     "save_last": true,
     "keep_n_checkpoints": 3
+  },
+  "huggingface": {
+    "repo_id": "euhidaman/MicroVLM-M",
+    "upload_enabled": true
   }
 }
