@@ -186,30 +186,4 @@ class ImagePreprocessor:
         return images
 
 
-if __name__ == "__main__":
-    # Test DeiT-Tiny encoder
-    config_path = os.path.join(os.path.dirname(
-        __file__), "..", "configs", "model_config.json")
 
-    encoder = DeiTTinyEncoder(config_path=config_path, pretrained=False)
-
-    # Test forward pass
-    batch_size = 2
-    images = torch.randn(batch_size, 3, 224, 224)
-
-    patch_embeddings = encoder(images)
-
-    print(f"Input shape: {images.shape}")
-    print(f"Patch embeddings shape: {patch_embeddings.shape}")
-    print(f"Expected num_patches: {encoder.num_patches}")
-    print(f"Expected embed_dim: {encoder.embed_dim}")
-
-    assert patch_embeddings.shape == (
-        batch_size, encoder.num_patches, encoder.embed_dim), "Shape mismatch!"
-
-    # Test preprocessing
-    preprocessor = ImagePreprocessor(image_size=224)
-    processed = preprocessor(images)
-    print(f"Preprocessed shape: {processed.shape}")
-
-    print("DeiT-Tiny encoder test passed!")

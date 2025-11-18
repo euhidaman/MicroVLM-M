@@ -3,24 +3,18 @@ import sys
 import json
 import argparse
 from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
-from wandb_counter import WandBRunCounter
-from dataset import CC12MDataset, collate_fn
-from tiny_vlm import TinyVLM
-import json
-import argparse
-from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 
-sys.path.append(str(Path(__file__).parent.parent))
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+from wandb_counter import WandBRunCounter
+from dataset import CC12MDataset
+from tiny_vlm import TinyVLM
 
 try:
     import wandb
@@ -144,7 +138,7 @@ class Stage2Trainer:
             batch_size=train_config['batch_size'],
             shuffle=True,
             num_workers=data_config['num_workers'],
-            collate_fn=collate_fn,
+            collate_fn=CC12MDataset.collate_fn,
             pin_memory=True,
             prefetch_factor=data_config.get('prefetch_factor', 2)
         )
@@ -154,7 +148,7 @@ class Stage2Trainer:
             batch_size=train_config['batch_size'],
             shuffle=False,
             num_workers=data_config['num_workers'],
-            collate_fn=collate_fn,
+            collate_fn=CC12MDataset.collate_fn,
             pin_memory=True
         )
 

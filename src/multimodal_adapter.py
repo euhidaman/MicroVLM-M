@@ -151,28 +151,4 @@ class MultimodalAdapter(nn.Module):
         return (batch_size, self.k_prefix, self.output_dim)
 
 
-if __name__ == "__main__":
-    # Test the adapter
-    import sys
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-    config_path = os.path.join(os.path.dirname(
-        __file__), "..", "configs", "model_config.json")
-
-    adapter = MultimodalAdapter(config_path=config_path)
-
-    # Test with dummy input
-    batch_size = 4
-    num_patches = 196
-    deit_dim = 192
-
-    dummy_patches = torch.randn(batch_size, num_patches, deit_dim)
-    output = adapter(dummy_patches)
-
-    print(f"Input shape: {dummy_patches.shape}")
-    print(f"Output shape: {output.shape}")
-    print(f"Expected shape: {adapter.get_output_shape(batch_size)}")
-
-    assert output.shape == adapter.get_output_shape(
-        batch_size), "Shape mismatch!"
-    print("Adapter test passed!")

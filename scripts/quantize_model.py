@@ -1,4 +1,3 @@
-from src.tiny_vlm import TinyVLM
 import os
 import sys
 import argparse
@@ -7,7 +6,10 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-sys.path.append(str(Path(__file__).parent.parent))
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from tiny_vlm import TinyVLM
 
 
 def quantize_bitlinear_weight(weight):

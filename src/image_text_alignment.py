@@ -252,41 +252,4 @@ class CrossModalFusionModule(nn.Module):
         return fused
 
 
-if __name__ == "__main__":
-    # Test alignment module
-    batch_size = 4
-    k_prefix = 25
-    seq_len = 50
-    
-    alignment = ImageTextAlignmentModule(
-        image_dim=192,
-        text_dim=2560,
-        projection_dim=512
-    )
-    
-    image_embeds = torch.randn(batch_size, k_prefix, 192)
-    text_embeds = torch.randn(batch_size, seq_len, 2560)
-    
-    loss, similarity = alignment(image_embeds, text_embeds, return_similarity=True)
-    
-    print(f"Image embeddings: {image_embeds.shape}")
-    print(f"Text embeddings: {text_embeds.shape}")
-    print(f"Contrastive loss: {loss.item():.4f}")
-    print(f"Similarity matrix: {similarity.shape}")
-    print(f"Temperature: {alignment.logit_scale.exp().item():.4f}")
-    
-    # Test cross-modal fusion
-    fusion = CrossModalFusionModule(
-        image_dim=192,
-        text_dim=2560,
-        num_heads=8,
-        num_layers=2
-    )
-    
-    fused_embeds, attn_weights = fusion(image_embeds, text_embeds, return_attention=True)
-    
-    print(f"\nCross-modal fusion output: {fused_embeds.shape}")
-    print(f"Attention layers: {len(attn_weights)}")
-    print(f"Attention shape: {attn_weights[0].shape}")
-    
-    print("\nImage-text alignment module test passed!")
+

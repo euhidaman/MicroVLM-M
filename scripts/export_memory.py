@@ -1,12 +1,14 @@
-from src.episodic_memory import EpisodicMemory
-from src.tiny_vlm import TinyVLM
 import os
 import sys
 import argparse
 from pathlib import Path
 import torch
 
-sys.path.append(str(Path(__file__).parent.parent))
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from episodic_memory import EpisodicMemory
+from tiny_vlm import TinyVLM
 
 
 def export_memory_module(checkpoint_path, output_path, config_path):

@@ -304,31 +304,4 @@ class EpisodicMemory(nn.Module):
         print(f"Memory loaded from {path}")
 
 
-if __name__ == "__main__":
-    # Test memory module
-    config_path = os.path.join(os.path.dirname(
-        __file__), "..", "configs", "model_config.json")
 
-    memory = EpisodicMemory(config_path=config_path, device='cpu')
-
-    # Test write
-    batch_size = 2
-    seq_len = 10
-    z_seq = torch.randn(seq_len, batch_size, memory.c_mem)
-
-    posterior, dkl_M = memory.write(z_seq, batch_size=batch_size)
-    print(f"Write test - DKL: {dkl_M.item():.4f}")
-
-    # Test read
-    z_query = torch.randn(batch_size, memory.c_mem)
-    z_ret, z_kv, dkl_w = memory.read(z_query, posterior)
-
-    print(
-        f"Read test - Retrieved shape: {z_ret.shape}, KV shape: {z_kv.shape}")
-    print(f"Read test - DKL: {dkl_w.item():.4f}")
-
-    # Test KV injection
-    mem_k, mem_v = memory.inject_to_kv_cache(z_kv, layer_idx=0)
-    print(f"KV injection - K shape: {mem_k.shape}, V shape: {mem_v.shape}")
-
-    print("Memory module test passed!")

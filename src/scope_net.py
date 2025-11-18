@@ -113,29 +113,4 @@ class ScopeNet(nn.Module):
         return loss
 
 
-if __name__ == "__main__":
-    # Test ScopeNet
-    config_path = os.path.join(os.path.dirname(
-        __file__), "..", "configs", "model_config.json")
 
-    scope_net = ScopeNet(config_path=config_path)
-
-    # Test forward pass
-    batch_size = 4
-    input_dim = 2560  # BitNet hidden size
-
-    dummy_context = torch.randn(batch_size, input_dim)
-    decisions, probs = scope_net(dummy_context)
-
-    print(f"Input shape: {dummy_context.shape}")
-    print(f"Decisions shape: {decisions.shape}")
-    print(f"Probabilities shape: {probs.shape}")
-    print(f"Decisions: {decisions}")
-    print(f"Probabilities: {probs}")
-
-    # Test loss computation
-    targets = torch.randint(0, 2, (batch_size,)).float()
-    loss = scope_net.get_loss(dummy_context, targets)
-    print(f"Loss: {loss.item():.4f}")
-
-    print("ScopeNet test passed!")

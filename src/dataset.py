@@ -103,27 +103,4 @@ class CC12MDataset(Dataset):
         }
 
 
-if __name__ == "__main__":
-    # Test dataset
-    metadata_path = "data/cc12m/train_metadata.json"
 
-    if os.path.exists(metadata_path):
-        dataset = CC12MDataset(metadata_path)
-        print(f"Dataset size: {len(dataset)}")
-
-        # Test loading
-        sample = dataset[0]
-        print(f"Image shape: {sample['image'].shape}")
-        print(f"Token IDs shape: {sample['token_ids'].shape}")
-        print(f"Caption: {sample['caption']}")
-
-        # Test collate
-        from torch.utils.data import DataLoader
-        loader = DataLoader(dataset, batch_size=4,
-                            collate_fn=CC12MDataset.collate_fn)
-        batch = next(iter(loader))
-        print(f"\nBatch images shape: {batch['images'].shape}")
-        print(f"Batch token IDs shape: {batch['token_ids'].shape}")
-    else:
-        print(f"Metadata not found: {metadata_path}")
-        print("Run python scripts/download_cc12m.py first")

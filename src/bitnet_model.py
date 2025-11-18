@@ -227,7 +227,7 @@ class BitNetAttention(nn.Module):
 
 
 class BitNetFeedForward(nn.Module):
-    \"\"\"BitNet feed-forward network with squared ReLU\"\"\"
+    """BitNet feed-forward network with squared ReLU"""
 
     def __init__(self, config: BitNetConfig):
         super().__init__()
@@ -249,7 +249,7 @@ class BitNetFeedForward(nn.Module):
 
 
 class BitNetBlock(nn.Module):
-    \"\"\"Single BitNet transformer block\"\"\"
+    """Single BitNet transformer block"""
 
     def __init__(self, config: BitNetConfig):
         super().__init__()
@@ -384,30 +384,4 @@ class BitNetModel(nn.Module):
         print("BitNet weights loaded successfully")
 
 
-if __name__ == "__main__":
-    # Test BitNet model
-    config = BitNetConfig(
-        hidden_size=2560,
-        num_layers=30,
-        num_heads=20,
-        num_kv_heads=5,
-        vocab_size=128256,
-        ffn_dim=6912
-    )
 
-    model = BitNetModel(config)
-
-    # Test forward pass
-    batch_size = 2
-    seq_len = 10
-    input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len))
-
-    logits, kv_caches, attn_weights = model(input_ids, return_attention=True)
-
-    print(f"Input shape: {input_ids.shape}")
-    print(f"Logits shape: {logits.shape}")
-    print(f"Number of KV caches: {len(kv_caches)}")
-    print(f"Number of attention weight tensors: {len(attn_weights)}")
-    print(f"Attention weight shape: {attn_weights[0].shape}")
-
-    print("BitNet model test passed!")

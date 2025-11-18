@@ -1,6 +1,3 @@
-from src.dataset import CC12MDataset
-from src.attention_visualizer import AttentionVisualizer
-from src.tiny_vlm import TinyVLM
 import os
 import sys
 import json
@@ -12,7 +9,12 @@ from PIL import Image
 import numpy as np
 from tqdm import tqdm
 
-sys.path.append(str(Path(__file__).parent.parent))
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from dataset import CC12MDataset
+from attention_visualizer import AttentionVisualizer
+from tiny_vlm import TinyVLM
 
 
 def visualize_cross_attention(model, visualizer, image, text_tokens, output_path, image_path=None):

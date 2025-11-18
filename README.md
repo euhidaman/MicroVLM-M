@@ -66,9 +66,10 @@ MicroVLM-M/
 │   ├── download_cc12m.py        # Download CC12M dataset
 │   ├── download_weights.py      # Download pretrained weights
 │   ├── train_stage1.py          # Stage 1 training script
-│   ├── train_stage2.py          # Stage 2 training script (to be run)
-│   └── visualize_attention.py   # Visualization utilities (to be run)
-├── tests/                       # Unit tests
+│   ├── train_stage2.py          # Stage 2 training script
+│   ├── visualize_attention.py   # Visualization utilities
+│   ├── quantize_model.py        # Model quantization script
+│   └── export_memory.py         # Memory module export utility
 ├── data/                        # Dataset storage
 ├── checkpoints/                 # Model checkpoints
 └── logs/                        # Training logs and WandB data
@@ -411,46 +412,6 @@ Counter stored in: `logs/wandb_run_counter.json`
 wandb dashboard
 # Or visit: https://wandb.ai/aman-derax20/MicroVLM-M
 ```
-
-## Testing
-
-### Unit Tests
-
-Run comprehensive test suite:
-
-```bash
-# Test all components
-python -m pytest tests/ -v
-
-# Test specific module
-python tests/test_adapter.py
-python tests/test_memory.py
-python tests/test_bitnet.py
-```
-
-### Component Tests
-
-```bash
-# Test multimodal adapter
-python src/multimodal_adapter.py
-
-# Test episodic memory
-python src/episodic_memory.py
-
-# Test BitNet
-python src/bitnet_model.py
-
-# Test DeiT encoder
-python src/deit_encoder.py
-
-# Test full model
-python src/tiny_vlm.py
-
-# Test dataset
-python src/dataset.py
-```
-
-**Expected Output**: "Test passed!" for each component
 
 ## Inference
 
