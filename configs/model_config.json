@@ -27,7 +27,7 @@
     "num_patches": 196,
     "k_prefix": 25,
     "use_mlp": true,
-    "mlp_hidden_dim": 512,
+    "hidden_dim": 512,
     "dropout": 0.1
   },
   "memory": {
@@ -58,8 +58,11 @@
   },
   "attention_viz": {
     "num_slices": 256,
-    "clip_threshold": 0.01,
-    "num_integration_points": 17,
-    "use_gaussian_sampling": true
+    "reduction": "mean",
+    "sampler": "gaussian",
+    "clip_value": 0.01,
+    "t_max": 3.0,
+    "n_points": 17,
+    "integration": "trapezoid"
   }
 }
