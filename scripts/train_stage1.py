@@ -3,12 +3,16 @@ Stage 1 Training: Adapter, Memory, and ScopeNet
 Freezes BitNet and DeiT early layers, trains only adapters and memory components
 """
 
-from wandb_counter import WandBRunCounter
-from dataset import CC12MDataset
-from tiny_vlm import TinyVLM
 import os
 import sys
 import torch
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from wandb_counter import WandBRunCounter
+from dataset import CC12MDataset
+from tiny_vlm import TinyVLM
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -16,9 +20,6 @@ from tqdm import tqdm
 import wandb
 import argparse
 import json
-
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 
 class Stage1Trainer:

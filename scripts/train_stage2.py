@@ -1,8 +1,15 @@
-from src.wandb_counter import WandBRunCounter
-from src.dataset import CC12MDataset, collate_fn
-from src.tiny_vlm import TinyVLM
 import os
 import sys
+import json
+import argparse
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from wandb_counter import WandBRunCounter
+from dataset import CC12MDataset, collate_fn
+from tiny_vlm import TinyVLM
 import json
 import argparse
 from pathlib import Path
