@@ -52,15 +52,21 @@ class Stage2Trainer:
         self._setup_data()
 
         if self.use_wandb:
-            counter = WandBRunCounter()
-            run_name, run_number = counter.get_next_run_name('stage2')
-            wandb.init(
-                project=self.config['logging']['wandb_project'],
-                entity=self.config['logging']['wandb_entity'],
-                name=run_name,
-                config=self.config
-            )
-            print(f"WandB run initialized: {run_name} (Run #{run_number})")
+            try:
+                counter = WandBRunCounter()
+                run_name, run_number = counter.get_next_run_name('stage2')
+                wandb.init(
+                    project=self.config['logging']['wandb_project'],
+                    entity=self.config['logging'].get('wandb_entity', None),
+                    name=run_name,
+                    config=self.config
+                )
+                print(f"WandB run initialized: {run_name} (Run #{run_number})")
+            except Exception as e:
+                print(f"Warning: WandB initialization failed: {e}")
+                print("Continuing training without WandB logging...")
+                self.use_wandb = False
+                self.config['logging']['use_wandb'] = False
 
         self.scaler = GradScaler(enabled=self.config['training']['use_amp'])
         self.global_step = 0

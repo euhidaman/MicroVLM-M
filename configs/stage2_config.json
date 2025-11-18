@@ -44,7 +44,6 @@
     "save_interval": 2000,
     "visualize_interval": 2000,
     "use_wandb": true,
-    "wandb_entity": "aman-derax20",
     "wandb_project": "MicroVLM-M"
   },
   "checkpointing": {

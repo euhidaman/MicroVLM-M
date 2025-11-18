@@ -106,16 +106,21 @@ class Stage1Trainer:
 
         # WandB
         if config['logging']['use_wandb']:
-            counter = WandBRunCounter(project_name=config['logging']['wandb_project'])
-            run_name, run_number = counter.get_next_run_name('stage1')
+            try:
+                counter = WandBRunCounter(project_name=config['logging']['wandb_project'])
+                run_name, run_number = counter.get_next_run_name('stage1')
 
-            wandb.init(
-                project=config['logging']['wandb_project'],
-                name=run_name,
-                config=config,
-                entity=config['logging']['wandb_entity']
-            )
-            print(f"WandB run: {run_name} (#{run_number})")
+                wandb.init(
+                    project=config['logging']['wandb_project'],
+                    name=run_name,
+                    config=config,
+                    entity=config['logging'].get('wandb_entity', None)  # None = use default
+                )
+                print(f"WandB run: {run_name} (#{run_number})")
+            except Exception as e:
+                print(f"Warning: WandB initialization failed: {e}")
+                print("Continuing training without WandB logging...")
+                config['logging']['use_wandb'] = False
 
         self.global_step = 0
         self.best_val_loss = float('inf')
