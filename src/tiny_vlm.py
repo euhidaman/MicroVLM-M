@@ -388,40 +388,6 @@ class TinyVLM(nn.Module):
         return total_size_mb
 
 
-if __name__ == "__main__":
-    # Test TinyVLM
-    config_path = os.path.join(os.path.dirname(
-        __file__), "..", "configs", "model_config.json")
 
-    model = TinyVLM(config_path=config_path, device='cpu')
-
-    # Test forward pass
-    batch_size = 2
-    images = torch.randn(batch_size, 3, 224, 224)
-    text_token_ids = torch.randint(0, 1000, (batch_size, 20))
-
-    logits, memory_state, attn_weights, metadata = model(
-        images,
-        text_token_ids,
-        use_memory=True,
-        return_attention=True
-    )
-
-    print(f"Images shape: {images.shape}")
-    print(f"Text tokens shape: {text_token_ids.shape}")
-    print(f"Logits shape: {logits.shape}")
-    print(f"Attention weights layers: {len(attn_weights)}")
-    print(f"Scope decisions: {metadata['scope_decision']}")
-    print(f"Scope probabilities: {metadata['scope_prob']}")
-
-    # Test memory update
-    dkl_M = model.update_memory(images, text_token_ids)
-    print(f"Memory KL divergence: {dkl_M.item():.4f}")
-
-    # Estimate model size
-    size_mb = model.estimate_model_size()
-    print(f"\nEstimated model size: {size_mb:.2f} MB")
-    print(f"Target size: {model.config['model_size_target_mb']} MB")
-    print(f"Within target: {size_mb < model.config['model_size_target_mb']}")
 
     print("\nTinyVLM test passed!")

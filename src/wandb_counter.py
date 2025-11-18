@@ -78,23 +78,4 @@ class WandBRunCounter:
         return self.counter_data['runs']
 
 
-if __name__ == "__main__":
-    # Test run counter
-    counter = WandBRunCounter()
 
-    print(f"Current count: {counter.get_current_count()}")
-
-    # Get new run names
-    run1, num1 = counter.get_next_run_name("stage1_test")
-    print(f"Run {num1}: {run1}")
-
-    run2, num2 = counter.get_next_run_name("stage2_test")
-    print(f"Run {num2}: {run2}")
-
-    run3, num3 = counter.get_next_run_name()
-    print(f"Run {num3}: {run3}")
-
-    # Show history
-    print("\nRun history:")
-    for run in counter.get_run_history():
-        print(f"  {run}")
