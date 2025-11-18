@@ -43,7 +43,7 @@
     "w_logvar_setting": 0,
     "deterministic": false
   },
-  "scope_net": {
+  "scope": {
     "input_dim": 2560,
     "hidden_dim": 256,
     "num_layers": 2,
