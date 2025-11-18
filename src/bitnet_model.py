@@ -17,14 +17,32 @@ class BitNetConfig:
     """BitNet model configuration"""
     hidden_size: int = 2560
     num_layers: int = 30
+    num_attention_heads: int = 20  # Support both naming conventions
     num_heads: int = 20
+    num_key_value_heads: int = 5
     num_kv_heads: int = 5
+    head_dim: int = 128
+    intermediate_size: int = 6912
     vocab_size: int = 128256
+    max_position_embeddings: int = 4096
+    rope_theta: float = 500000.0
+    rms_norm_eps: float = 1e-6
+    tie_word_embeddings: bool = False
+    
+    # Legacy aliases
     ffn_dim: int = 6912
     norm_eps: float = 1e-5
-    rope_theta: float = 500000.0
     max_seq_length: int = 2048
     use_kernel: bool = False  # False for fp16 training
+    
+    def __post_init__(self):
+        # Ensure compatibility between different naming conventions
+        if self.num_heads != self.num_attention_heads:
+            self.num_heads = self.num_attention_heads
+        if self.num_kv_heads != self.num_key_value_heads:
+            self.num_kv_heads = self.num_key_value_heads
+        if self.ffn_dim != self.intermediate_size:
+            self.ffn_dim = self.intermediate_size
 
 
 class RMSNorm(nn.Module):
@@ -209,15 +227,18 @@ class BitNetAttention(nn.Module):
 
 
 class BitNetFeedForward(nn.Module):
-    """BitNet feed-forward network with squared ReLU"""
+    \"\"\"BitNet feed-forward network with squared ReLU\"\"\"
 
     def __init__(self, config: BitNetConfig):
         super().__init__()
 
-        self.w13 = BitLinear(config.hidden_size, 2 *
-                             config.ffn_dim, bias=False)
-        self.w2 = BitLinear(config.ffn_dim, config.hidden_size, bias=False)
-        self.ffn_sub_norm = RMSNorm(config.ffn_dim, config.norm_eps)
+        ffn_dim = getattr(config, 'ffn_dim', getattr(config, 'intermediate_size', 6912))
+        hidden_size = config.hidden_size
+        norm_eps = getattr(config, 'norm_eps', getattr(config, 'rms_norm_eps', 1e-5))
+
+        self.w13 = BitLinear(hidden_size, 2 * ffn_dim, bias=False)
+        self.w2 = BitLinear(ffn_dim, hidden_size, bias=False)
+        self.ffn_sub_norm = RMSNorm(ffn_dim, norm_eps)
 
     def forward(self, x):
         """Forward pass with squared ReLU activation"""
@@ -228,15 +249,17 @@ class BitNetFeedForward(nn.Module):
 
 
 class BitNetBlock(nn.Module):
-    """Single BitNet transformer block"""
+    \"\"\"Single BitNet transformer block\"\"\"
 
     def __init__(self, config: BitNetConfig):
         super().__init__()
 
+        norm_eps = getattr(config, 'norm_eps', getattr(config, 'rms_norm_eps', 1e-5))
+
         self.attention = BitNetAttention(config)
         self.feed_forward = BitNetFeedForward(config)
-        self.attention_norm = RMSNorm(config.hidden_size, config.norm_eps)
-        self.ffn_norm = RMSNorm(config.hidden_size, config.norm_eps)
+        self.attention_norm = RMSNorm(config.hidden_size, norm_eps)
+        self.ffn_norm = RMSNorm(config.hidden_size, norm_eps)
 
     def forward(self, x, attention_mask=None, kv_cache=None, memory_kv=None):
         """Forward pass with residual connections"""
@@ -261,7 +284,9 @@ class BitNetModel(nn.Module):
     def __init__(self, config: BitNetConfig):
         super().__init__()
 
-        self.config = config
+        self.config = vars(config) if hasattr(config, '__dataclass_fields__') else config
+        
+        norm_eps = getattr(config, 'norm_eps', getattr(config, 'rms_norm_eps', 1e-5))
 
         # Token embeddings
         self.tok_embeddings = nn.Embedding(
@@ -273,7 +298,7 @@ class BitNetModel(nn.Module):
         ])
 
         # Final norm
-        self.norm = RMSNorm(config.hidden_size, config.norm_eps)
+        self.norm = RMSNorm(config.hidden_size, norm_eps)
 
         # Output projection
         self.output = nn.Linear(

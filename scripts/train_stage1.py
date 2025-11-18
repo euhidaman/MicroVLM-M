@@ -29,7 +29,7 @@ class Stage1Trainer:
 
     def __init__(self, config):
         self.config = config
-        self.device = torch.device(config['device'])
+        self.device = torch.device(config['training']['device'])
 
         # Initialize model
         print("Initializing TinyVLM...")

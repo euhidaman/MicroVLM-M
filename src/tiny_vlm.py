@@ -64,7 +64,20 @@ class TinyVLM(nn.Module):
         self.adapter = MultimodalAdapter(config_dict=self.config['adapter'])
 
         # Language model (BitNet)
-        bitnet_config = BitNetConfig(**self.config['bitnet'])
+        bitnet_config_dict = self.config['bitnet']
+        bitnet_config = BitNetConfig(
+            hidden_size=bitnet_config_dict['hidden_size'],
+            num_layers=bitnet_config_dict['num_layers'],
+            num_attention_heads=bitnet_config_dict['num_attention_heads'],
+            num_key_value_heads=bitnet_config_dict['num_key_value_heads'],
+            head_dim=bitnet_config_dict['head_dim'],
+            intermediate_size=bitnet_config_dict['intermediate_size'],
+            vocab_size=bitnet_config_dict['vocab_size'],
+            max_position_embeddings=bitnet_config_dict['max_position_embeddings'],
+            rope_theta=bitnet_config_dict['rope_theta'],
+            rms_norm_eps=bitnet_config_dict['rms_norm_eps'],
+            tie_word_embeddings=bitnet_config_dict['tie_word_embeddings']
+        )
         self.language_model = BitNetModel(bitnet_config)
 
         # Episodic memory
