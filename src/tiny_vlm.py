@@ -181,25 +181,18 @@ class TinyVLM(nn.Module):
 
         return fused_embeds, image_token_range, text_token_range
 
-    def compute_alignment_loss(self, images, text_token_ids):
+    def compute_alignment_loss(self, image_embeds, text_embeds):
         """
         Compute EVO-1 style contrastive image-text alignment loss
 
         Args:
-            images: (batch, 3, H, W) images
-            text_token_ids: (batch, text_len) text tokens
+            image_embeds: (batch, num_patches, embed_dim) precomputed image embeddings
+            text_embeds: (batch, text_len, hidden_dim) precomputed text embeddings
 
         Returns:
             alignment_loss: contrastive loss between image and text
             similarity_matrix: image-text similarity
         """
-        # Encode images to patch embeddings (before pooling)
-        images = self.image_preprocessor(images).to(self.device)
-        image_embeds = self.vision_encoder(images)  # (batch, num_patches, embed_dim)
-
-        # Get text embeddings from BitNet
-        text_embeds = self.language_model.tok_embeddings(text_token_ids)  # (batch, text_len, hidden_dim)
-
         # Compute contrastive alignment loss (EVO-1 methodology)
         alignment_loss, similarity = self.image_text_alignment(
             image_embeds,
@@ -224,23 +217,24 @@ class TinyVLM(nn.Module):
             logits: (batch, seq_len, vocab_size)
             memory_state: updated memory state
             attention_weights: optional attention weights
+            cached_embeds: dict with 'image_embeds' and 'text_embeds' for loss computation
         """
         batch_size = images.size(0)
 
-        # Encode images to prefix tokens
-        prefix_tokens = self.encode_images(images)
+        # Preprocess and encode images once
+        images_preprocessed = self.image_preprocessor(images).to(self.device)
+        image_embeds = self.vision_encoder(images_preprocessed)  # (batch, num_patches, embed_dim)
+        
+        # Project to prefix tokens
+        prefix_tokens = self.adapter(image_embeds)
 
+        # Get text embeddings
+        text_embeds = self.language_model.tok_embeddings(text_token_ids)
+        
         # Optional: Apply cross-modal fusion (EVO-1 methodology)
         if use_fusion:
-            # Get raw patch embeddings
-            images_preprocessed = self.image_preprocessor(images).to(self.device)
-            patch_embeds = self.vision_encoder(images_preprocessed)
-            
-            # Get text embeddings
-            text_embeds = self.language_model.tok_embeddings(text_token_ids)
-            
             # Apply cross-attention fusion
-            text_embeds_fused = self.cross_modal_fusion(patch_embeds, text_embeds)
+            text_embeds_fused = self.cross_modal_fusion(image_embeds, text_embeds)
             
             # Build sequence with fused text embeddings
             bos_embeds = self.language_model.tok_embeddings(
@@ -310,7 +304,11 @@ class TinyVLM(nn.Module):
             'scope_decision': scope_decision,
             'scope_prob': scope_prob,
             'image_token_range': image_token_range,
-            'text_token_range': text_token_range
+            'text_token_range': text_token_range,
+            'cached_embeds': {
+                'image_embeds': image_embeds,
+                'text_embeds': text_embeds
+            }
         }
 
     def update_memory(self, images, text_token_ids):

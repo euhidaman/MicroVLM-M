@@ -157,10 +157,16 @@ class Stage1Trainer:
         lm_loss = self.lm_loss_fn(lm_logits_flat, lm_targets_flat)
 
         # EVO-1 Image-Text Alignment Loss (contrastive learning)
-        alignment_loss, similarity_matrix = self.model.compute_alignment_loss(
-            images,
-            token_ids
-        )
+        # Use cached embeddings from forward pass to avoid recomputation
+        cached_embeds = metadata.get('cached_embeds', {})
+        if cached_embeds:
+            alignment_loss, similarity_matrix = self.model.compute_alignment_loss(
+                cached_embeds['image_embeds'],
+                cached_embeds['text_embeds']
+            )
+        else:
+            # Fallback if cached_embeds not available
+            alignment_loss = torch.tensor(0.0, device=self.device)
 
         # Memory reconstruction loss (encourage meaningful memory)
         if memory_state is not None:
