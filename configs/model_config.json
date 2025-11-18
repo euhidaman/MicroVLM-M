@@ -34,7 +34,7 @@
     "k_mem": 128,
     "c_mem": 2560,
     "num_layers": 30,
-    "num_heads": 20,
+    "num_heads": 5,
     "head_dim": 128,
     "observation_noise_std": 0.01,
     "direct_writing": true,
