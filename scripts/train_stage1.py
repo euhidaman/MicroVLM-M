@@ -29,8 +29,9 @@ class Stage1Trainer:
     Stage 1 Trainer: Train adapters, memory, and scope net
     """
 
-    def __init__(self, config):
+    def __init__(self, config, args):
         self.config = config
+        self.args = args
         self.device = torch.device(config['training']['device'])
 
         # Initialize model
@@ -76,14 +77,19 @@ class Stage1Trainer:
 
         # Dataset
         print("Loading dataset...")
+        if args.small_scale:
+            print("SMALL-SCALE MODE: Training on 1000 randomly sampled image-caption pairs")
+        
         self.train_dataset = CC12MDataset(
             metadata_path=config['data']['train_metadata'],
-            image_size=224
+            image_size=224,
+            small_scale=args.small_scale
         )
 
         self.val_dataset = CC12MDataset(
             metadata_path=config['data']['val_metadata'],
-            image_size=224
+            image_size=224,
+            small_scale=args.small_scale
         )
 
         self.train_loader = DataLoader(
@@ -422,6 +428,8 @@ def main():
     parser = argparse.ArgumentParser(description="Stage 1 Training (EVO-1 Alignment + Larimar Memory)")
     parser.add_argument('--config', type=str, default='configs/stage1_config.json',
                         help='Training configuration file')
+    parser.add_argument('--small-scale', action='store_true',
+                        help='Use small-scale mode (1000 random samples) for quick validation')
     args = parser.parse_args()
 
     # Load config
@@ -434,7 +442,7 @@ def main():
         config = json.load(f)
 
     # Train
-    trainer = Stage1Trainer(config)
+    trainer = Stage1Trainer(config, args)
     trainer.train()
 
 

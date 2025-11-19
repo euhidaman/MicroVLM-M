@@ -15,18 +15,28 @@ class CC12MDataset(Dataset):
     CC12M dataset for vision-language model training
     """
 
-    def __init__(self, metadata_path, image_size=224, tokenizer=None, max_text_length=128):
+    def __init__(self, metadata_path, image_size=224, tokenizer=None, max_text_length=128, small_scale=False):
         """
         Args:
             metadata_path: path to metadata JSON file
             image_size: target image size
             tokenizer: text tokenizer (simple character-level if None)
             max_text_length: maximum text sequence length
+            small_scale: if True, randomly sample 1000 image-caption pairs for quick testing
         """
         with open(metadata_path, 'r') as f:
             self.metadata = json.load(f)
 
         self.samples = self.metadata['samples']
+        
+        # Small-scale mode: randomly sample 1000 pairs
+        if small_scale:
+            import random
+            random.seed(42)  # Reproducible sampling
+            if len(self.samples) > 1000:
+                self.samples = random.sample(self.samples, 1000)
+                print(f"Small-scale mode: Using {len(self.samples)} sampled image-caption pairs")
+        
         self.image_size = image_size
         self.tokenizer = tokenizer
         self.max_text_length = max_text_length
