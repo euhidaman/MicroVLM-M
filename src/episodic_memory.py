@@ -186,10 +186,17 @@ class EpisodicMemory(nn.Module):
             dkl_w: KL divergence for addressing weights
         """
         memory_mean, memory_cov = memory_state
-        batch_size = memory_mean.size(0)
+        stored_batch_size = memory_mean.size(0)
 
         if z_query.dim() == 3:
             z_query = z_query[-1]  # Take last timestep
+        
+        query_batch_size = z_query.size(0)
+
+        # Expand memory to match query batch if needed
+        if query_batch_size != stored_batch_size:
+            memory_mean = memory_mean.expand(query_batch_size, -1, -1)
+            memory_cov = memory_cov.expand(query_batch_size, -1, -1)
 
         # Compute addressing weights using pseudoinverse
         M_pinv = self._approx_pseudo_inverse(
